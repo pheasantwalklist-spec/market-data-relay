@@ -1,0 +1,50 @@
+name: Polygon Data Relay
+
+on:
+  schedule:
+    # Runs every Tuesday at 8:45am ET (12:45 UTC)
+    - cron: '45 12 * * 2'
+  workflow_dispatch:  # allows manual trigger anytime
+
+jobs:
+  fetch-polygon:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch Polygon options data
+        env:
+          POLYGON_KEY: ${{ secrets.POLYGON_KEY }}
+        run: |
+          mkdir -p data
+
+          # SPY $480 put Mar 2027
+          curl -s "https://api.polygon.io/v3/snapshot/options/SPY/O:SPY270319P00480000?apiKey=$POLYGON_KEY" \
+            > data/spy_480_put.json
+
+          # SPY $440 put Mar 2027
+          curl -s "https://api.polygon.io/v3/snapshot/options/SPY/O:SPY270319P00440000?apiKey=$POLYGON_KEY" \
+            > data/spy_440_put.json
+
+          # SPY $400 put Dec 2027
+          curl -s "https://api.polygon.io/v3/snapshot/options/SPY/O:SPY271219P00400000?apiKey=$POLYGON_KEY" \
+            > data/spy_400_put.json
+
+          # AVGO Dec 2026 chain (top 10 strikes near ATM)
+          curl -s "https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=AVGO&expiration_date=2026-12-19&limit=10&apiKey=$POLYGON_KEY" \
+            > data/avgo_dec26_chain.json
+
+          # Timestamp
+          echo "{\"fetched_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > data/meta.json
+
+      - name: Commit and push data
+        run: |
+          git config user.name "polygon-relay"
+          git config user.email "relay@noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Weekly Polygon data $(date -u +%Y-%m-%d)"
+          git push
